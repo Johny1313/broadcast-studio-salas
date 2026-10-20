@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+  <title>Broadcast Studio — Dual Canvas V1.7</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brandicon">◧</span><div><strong>BROADCAST STUDIO</strong><small>DUAL CANVAS · v1.7.0</small></div></div>
+    <div class="top-actions"><span id="systemStatus" class="pill">● Preparado</span><button id="btnSave" class="btn subtle">↓ Salvar preset</button><button id="btnLoad" class="btn subtle">↑ Abrir preset</button><input type="file" accept=".json,application/json" hidden id="presetFile"/><button id="btnRecordBoth" class="btn danger">● Gravar 16:9 + 9:16</button><button id="btnStopBoth" class="btn subtle" disabled>■ Parar gravação</button></div>
+  </header>
+  <div class="app-shell">
+    <aside class="sidebar left">
+      <div class="side-heading">FONTES E DISPOSITIVOS</div>
+      <section class="panel source-mode-panel"><label class="sm-label" for="studioSourceMode">Modo de captação</label><select id="studioSourceMode" aria-label="Modo de captação"><option value="mixed">Câmeras + Sala remota</option><option value="camera">Câmeras locais (USB / HDMI)</option><option value="room">Sala de reunião (celular / webcam)</option></select><small class="muted">Alternar o painel não encerra fontes ou participantes em uso.</small></section>
+      <section id="directCamerasPanel" class="panel compact">
+        <div class="section-title"><h3><span class="dot cyan"></span>3 câmeras independentes</h3><button id="btnRefreshDevices" title="Atualizar dispositivos" class="btn tiny subtle">↻ Detectar</button></div>
+        <small class="muted">USB / DSLR por capturadora HDMI / webcams compatíveis. Uma fonte por câmera, compartilhada pelos dois canvas.</small>
+        <div class="camera-stack">
+          <div class="camera-device"><label class="sm-label" for="cameraSelect1">CÂMERA 1</label><div class="form-row"><select id="cameraSelect1" aria-label="Selecionar câmera 1"><option value="">Câmera padrão</option></select><button id="btnCamera1" class="btn primary">Conectar</button><button id="btnDisconnect1" class="btn tiny subtle" title="Desconectar câmera 1">×</button></div><small id="cameraStatus1" class="muted">Desconectada</small></div>
+          <div class="camera-device"><label class="sm-label" for="cameraSelect2">CÂMERA 2</label><div class="form-row"><select id="cameraSelect2" aria-label="Selecionar câmera 2"><option value="">Selecione uma câmera</option></select><button id="btnCamera2" class="btn primary">Conectar</button><button id="btnDisconnect2" class="btn tiny subtle" title="Desconectar câmera 2">×</button></div><small id="cameraStatus2" class="muted">Desconectada</small></div>
+          <div class="camera-device"><label class="sm-label" for="cameraSelect3">CÂMERA 3</label><div class="form-row"><select id="cameraSelect3" aria-label="Selecionar câmera 3"><option value="">Selecione uma câmera</option></select><button id="btnCamera3" class="btn primary">Conectar</button><button id="btnDisconnect3" class="btn tiny subtle" title="Desconectar câmera 3">×</button></div><small id="cameraStatus3" class="muted">Desconectada</small></div>
+        </div>
+        <button id="btnScreen" class="btn subtle wide">▣ Compartilhar tela (fonte auxiliar)</button>
+      </section>
+      <section id="livekitCloudPanel" class="panel guest-panel" aria-label="Salas LiveKit Cloud">
+        <div class="section-title"><h3><span class="dot cyan"></span>Sala de convidados • LiveKit Cloud</h3><span id="cloudCount" class="counter">0 / 8</span></div>
+        <p class="muted">Link HTTPS público direto: sem Cloudflared local. Configure uma vez o servidor de salas hospedado e a chave de operador.</p>
+        <label class="sm-label">Servidor de salas HTTPS</label><input id="cloudOrigin" type="url" placeholder="https://salas.seudominio.com" spellcheck="false" autocomplete="off"/>
+        <label class="sm-label">Chave de operador (não é a API Secret do LiveKit)</label><input id="cloudOperatorKey" type="password" placeholder="Chave gerada no backend hospedado" autocomplete="off"/>
+        <div class="form-row"><button id="cloudCreate" class="btn primary wide" type="button">Criar sala LiveKit</button><button id="cloudReconnect" class="btn subtle" type="button" disabled>Reconectar</button></div>
+        <label class="sm-label">Convite HTTPS</label><input id="cloudInvite" type="text" readonly disabled placeholder="Aguardando criação da sala"/>
+        <div class="form-row"><button id="cloudCopy" class="btn green wide" disabled>Copiar convite</button><button id="cloudTest" class="btn subtle" type="button">Abrir link</button></div>
+        <button id="cloudMic" class="btn subtle wide" type="button">Compartilhar microfone do estúdio</button>
+        <p id="cloudStatus" class="muted" role="status">Configure o backend hospedado (cloud/) para habilitar.</p>
+        <div id="cloudPeople" class="guest-people"></div>
+        <small class="muted">O link só é liberado após criar uma sala no backend. Convidados aguardam aprovação antes de receber token de mídia.</small>
+      </section>
+      <details class="legacy-guests"><summary>Modo antigo — túnel local opcional (avançado)</summary>
+      <section id="remoteGuestsPanel" class="panel guest-panel" aria-label="Convidados remotos">
+        <div class="section-title"><h3><span class="dot cyan"></span>Sala de convidados</h3><span class="counter" id="guestCount">0 / 8</span></div>
+        <p class="muted">Fonte direta: câmeras USB, DSLR via capturadora, placas HDMI. Fonte remota: convidados por webcam ou celular com aprovação. Até 8 na sala, até 3 ocupando os canais de câmera; o canal 4 continua para playlist.</p>
+        <label class="sm-label" for="publicUrl">Endereço HTTPS público para celulares (se configurado)</label>
+        <input id="publicUrl" type="url" placeholder="https://seu-dominio.example" autocomplete="off"/>
+        <div class="form-row"><button id="btnCreateRoom" class="btn primary wide">+ Criar sala</button><button id="btnHttpsInvite" class="btn green" title="Inicia túnel HTTPS somente se cloudflared já estiver instalado, sem downloads">Ativar convite HTTPS</button></div><div class="form-row"><button id="btnVerifyPublic" class="btn subtle wide" title="Testa seu próprio domínio HTTPS, se configurado">Validar meu domínio</button></div><div class="tunnel-setup"><strong>Conexão HTTPS para convidados</strong><div class="form-row"><button id="btnCheckCloudflared" class="btn subtle wide" type="button">Verificar instalação</button><button id="btnChooseCloudflared" class="btn subtle wide" type="button" hidden>Selecionar cloudflared</button></div><small class="muted" id="cloudflaredStatus" role="status">Verifique se o componente oficial está instalado.</small><p class="muted">Windows: <code>winget install -e --id Cloudflare.cloudflared</code>. O programa não é instalado automaticamente. <a id="cloudflaredDocsLink" href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/" target="_blank" rel="noopener noreferrer">Downloads oficiais</a>.</p></div><div class="form-row"><button id="btnCopyInvite" class="btn subtle wide" disabled>Copiar convite público</button><button id="btnOpenInvite" class="btn subtle wide" disabled>Testar neste PC</button></div>
+        <p class="muted guest-help">Nunca envie um link 127.0.0.1: ele funciona apenas no próprio computador. Instale <b>cloudflared</b> separadamente a partir do site oficial da Cloudflare. Depois clique em <b>Ativar convite HTTPS</b>. O Broadcast Studio nunca baixa executáveis. Para domínio próprio, preencha o endereço acima e clique em <b>Validar meu domínio</b>.</p><div class="guest-invite" id="inviteDetails" hidden><small class="sm-label">Convite HTTPS verificado para compartilhar</small><input id="inviteLink" readonly aria-label="Link de convite"/><small id="inviteWarning" class="muted"></small></div>
+        <div class="scroll-list" id="guestList" aria-label="Convidados e sala de espera"><p class="muted">Crie uma sala para liberar o convite.</p></div>
+        <div class="muted" id="guestServiceStatus" role="status">Sinalização local não iniciada.</div>
+        <div class="network-check"><strong>Diagnóstico WebRTC e portas</strong><p class="muted">STUN/TURN verifica conectividade de mídia; HTTPS sozinho não transmite áudio/vídeo de convidados.</p><button id="btnTestIce" type="button" class="btn subtle wide">Testar conexão ICE (STUN/TURN)</button><p id="iceNetworkStatus" class="muted" role="status">Configure servidores opcionais em rede.config.json; portas externas não são abertas automaticamente.</p></div>
+      </section>
+      </details>
+      <section class="panel compact">
+        <h3><span class="dot gold"></span>Áudio</h3>
+        <div class="form-row"><select id="microphoneSelect" aria-label="Selecionar microfone"><option value="">Microfone padrão</option></select><button id="btnMic" class="btn primary">Conectar</button></div>
+        <div class="form-row"><label class="sm-label" for="micVolume">Ganho</label><input id="micVolume" type="range" min="0" max="2" step="0.05" value="1"/><output id="micVolumeText">100%</output></div>
+        <div class="meter"><div id="audioMeter"></div></div>
+        <small id="micStatus" class="muted">Nenhum microfone conectado</small>
+      </section>
+      <section class="panel">
+        <div class="section-title"><h3>Biblioteca de mídia</h3><span id="mediaCount" class="counter">0</span></div>
+        <div class="form-row"><button id="btnFiles" class="btn primary wide">+ Importar arquivos</button><input type="file" id="mediaFiles" accept="video/*,image/*,.mov,.mkv,.webm,.mp4,.png,.jpg,.jpeg,.webp" multiple hidden/></div>
+        <label for="mediaUrl" class="sm-label">Vídeo direto, YouTube, Vimeo ou endereço de site</label>
+        <div class="form-row"><input id="mediaUrl" type="url" placeholder="https://..."/><button id="btnAddUrl" class="btn subtle">+</button></div>
+        <div class="scroll-list" id="mediaList" aria-label="Biblioteca de fontes"></div>
+        <small class="muted">Links de sites aparecem na janela 4 do ENSAIO, sem colocar no ar. Sites que bloqueiam incorporação deverão ser abertos externamente. Somente mídia capturável pode entrar na gravação/transmissão.</small>
+      </section>
+      <section class="panel compact" aria-label="Navegação limpa e bloqueio de propagandas">
+        <div class="section-title"><h3><span class="dot cyan"></span>Navegação limpa</h3><span id="adFilterBadge" class="counter">Verificando</span></div>
+        <label class="sm-label" for="adFilterMode">Bloqueio de anúncios em sites</label>
+        <div class="form-row"><select id="adFilterMode" aria-label="Modo do bloqueador de propagandas"><option value="off">Desativado</option><option value="balanced" selected>Padrão (recomendado)</option><option value="enhanced">Reforçado</option></select><button id="btnReloadSites" class="btn tiny subtle" title="Recarregar links ativos da composição 4">↻ Sites</button></div>
+        <small id="adFilterStatus" class="muted" role="status">Detectando proteção disponível...</small><button id="btnTestAdFilter" class="btn tiny subtle wide" type="button">Testar bloqueio nesta sessão</button><small id="adFilterDiagnosis" class="muted" role="status">Use o modo desktop Electron para bloquear anúncios dentro das páginas de ensaio.</small>
+        <small class="muted">Bloqueia redes de anúncios conhecidas. O modo reforçado também tenta ocultar banners. Caso um site falhe, desative e recarregue. Não remove anúncios incorporados ao vídeo.</small>
+      </section>
+      <section class="panel playlist-panel">
+        <div class="section-title"><h3>Playlist • Composição 4</h3><span id="playlistCount" class="counter">0</span></div>
+        <div id="playlistList" class="scroll-list" aria-label="Ordem da playlist"></div>
+        <div class="rehearsal-panel"><div class="rehearsal-head"><span class="rehearsal-badge">● ENSAIO / OFF-AIR</span><span class="muted">Não inicia live</span></div><button id="btnRehearse" class="btn green wide">▶ Testar item na janela 4</button><small id="linkPreviewStatus" class="muted" role="status">Selecione um item da playlist para testar nas composições 4.</small></div>
+        <div class="form-row transport"><button id="btnPrev" class="btn subtle" title="Anterior">|◀</button><button id="btnPlay" class="btn primary wide">▶ Reproduzir</button><button id="btnNext" class="btn subtle" title="Próximo">▶|</button></div>
+        <div class="form-row"><label class="check"><input type="checkbox" id="autoNext" checked/> Próximo automático</label><label class="check"><input type="checkbox" id="loopPlaylist"/> Repetir</label></div>
+        <div class="form-row"><label class="sm-label">Enviar para</label><select id="playlistTarget"><option value="both-media">Canal 4 • 16:9 + 9:16</option><option value="h-media">Canal 4 • só 16:9</option><option value="v-media">Canal 4 • só 9:16</option><option value="selected">Canal 4 • canvas selecionado</option></select></div>
+        <label class="check"><input type="checkbox" id="playlistAutoTake"/> Aplicar automaticamente no PROGRAMA (somente mídia capturável)</label>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <div class="workspace-head"><div><h1>Estúdio de produção</h1><p>4 composições por canvas · 3 câmeras + 1 playlist · branding por formato</p></div><span class="helper-label">Arraste para mover · canto inferior direito para redimensionar</span></div>
+      <section class="panel quick-scenes" aria-label="Layouts rápidos">
+        <div class="section-title"><h3>Layouts rápidos • por canvas</h3><small class="muted">Dividir telas preserva o layout manual; demais presets reorganizam somente a prévia.</small></div>
+        <div class="quick-controls"><label>Canvas<select id="layoutFormat"><option value="h">Horizontal 16:9</option><option value="v">Vertical 9:16</option></select></label><label>Principal<select id="layoutMain"><option value="0">Câmera 1</option><option value="1">Câmera 2</option><option value="2">Câmera 3</option><option value="3">Playlist 4</option></select></label><label>Secundária<select id="layoutSecond"><option value="3">Playlist 4</option><option value="0">Câmera 1</option><option value="1">Câmera 2</option><option value="2">Câmera 3</option></select></label></div>
+        <div class="quick-buttons"><button data-layout="full" class="btn subtle">▣ Tela cheia</button><button data-layout="camera" class="btn subtle">◉ Câmera</button><button data-layout="playlist" class="btn subtle">▶ Playlist</button><button data-layout="split" class="btn primary" title="Mostra as duas fontes nas posições e dimensões que você criou neste canvas">◫ Dividir sem alterar layout</button><button data-layout="pip" class="btn subtle">▧ PiP</button><button data-layout="grid" class="btn subtle">⊞ 4 janelas</button></div>
+      </section>
+      <div class="dual-stage">
+        <section class="stage-panel horizontal-stage" data-format="h">
+          <div class="stage-title"><div><span class="format-mark">16:9</span><strong>Horizontal</strong><small>PRÉVIA EDITÁVEL</small></div><div class="stage-buttons"><button class="btn tiny subtle" id="btnAddH">Mostrar 4</button><button class="btn tiny subtle" id="btnFullscreenH" title="Tela de prévia em tela cheia">⛶</button><button class="btn tiny green" id="btnTakeH">→ No ar</button></div></div>
+          <div class="canvas-wrap" id="previewWrapH"><canvas id="previewH" width="1280" height="720" aria-label="Prévia horizontal editável"></canvas><div id="webOverlayH" class="web-slot" hidden></div></div>
+          <div class="under-canvas"><span>1280 × 720 · 30fps</span><span id="hProgInfo" class="state-label">PROGRAMA • Pronto</span></div>
+        </section>
+        <section class="stage-panel vertical-stage" data-format="v">
+          <div class="stage-title"><div><span class="format-mark purple">9:16</span><strong>Vertical</strong><small>PRÉVIA EDITÁVEL</small></div><div class="stage-buttons"><button class="btn tiny subtle" id="btnAddV">Mostrar 4</button><button class="btn tiny subtle" id="btnFullscreenV" title="Tela de prévia em tela cheia">⛶</button><button class="btn tiny green" id="btnTakeV">→ No ar</button></div></div>
+          <div class="canvas-wrap vertical-wrap" id="previewWrapV"><canvas id="previewV" width="720" height="1280" aria-label="Prévia vertical editável"></canvas><div id="webOverlayV" class="web-slot" hidden></div></div>
+          <div class="under-canvas"><span>720 × 1280 · 30fps</span><span id="vProgInfo" class="state-label">PROGRAMA • Pronto</span></div>
+        </section>
+      </div>
+      <div class="program-controls"><div><strong>PREVIEW → PROGRAM</strong><p>Editar a prévia não altera o sinal no ar até o corte. Páginas incorporadas são somente para ensaio; não são capturadas no PROGRAMA.</p></div><button id="btnTakeBoth" class="btn primary large">→ Colocar OS DOIS no ar</button></div>
+      <section class="panel program-monitor"><div class="section-title"><h3>Monitor do PROGRAMA — sinal gravado e transmitido</h3><span class="counter">Ao vivo ≠ Prévia</span></div><div class="monitor-grid"><div><span class="sm-label">PROGRAMA 16:9</span><canvas id="programMonitorH" width="320" height="180" aria-label="Sinal horizontal real"></canvas></div><div><span class="sm-label">PROGRAMA 9:16</span><canvas id="programMonitorV" width="101" height="180" aria-label="Sinal vertical real"></canvas></div></div></section>
+      <section class="panel scene-panel"><div class="section-title"><h3>Identidade visual</h3><span class="counter">Fundo · Moldura · Logo · GC</span></div><div class="scene-grid branding-grid"><div class="brand-card"><h4>16:9 • Horizontal</h4><label class="sm-label">GC horizontal</label><input id="gcTitleH" placeholder="Título horizontal" value="BROADCAST STUDIO"/><input id="gcSubH" placeholder="Subtítulo" value="PRODUÇÃO AO VIVO"/><label class="check"><input id="gcOnH" type="checkbox" checked/> Exibir GC</label><div class="brand-group"><label class="sm-label">Plano de fundo</label><div class="form-row compact"><input id="bgColorH" type="color" value="#0e2138"/><input id="bgImageH" type="file" accept="image/*"/><button id="btnClearBgH" class="btn tiny subtle" type="button">Limpar</button></div><small id="bgInfoH" class="muted">Sem imagem</small></div><div class="brand-group"><label class="sm-label">Moldura</label><label class="check"><input id="frameOnH" type="checkbox"/> Exibir moldura</label><div class="form-row compact"><label>Largura <input id="frameWidthH" type="number" min="0" max="80" value="14"/></label><label>Opac. <input id="frameOpacityH" type="number" min="0" max="100" value="100"/></label><input id="frameColorH" type="color" value="#ffffff"/></div><div class="form-row compact"><input id="frameImageH" type="file" accept="image/*"/><button id="btnClearFrameH" class="btn tiny subtle" type="button">Limpar imagem</button></div><small id="frameInfoH" class="muted">Sem imagem</small></div><div class="brand-group"><label class="sm-label">Logo</label><label class="check"><input id="logoOnH" type="checkbox"/> Exibir logo</label><div class="form-row compact"><input id="logoImageH" type="file" accept="image/*"/><button id="btnClearLogoH" class="btn tiny subtle" type="button">Limpar logo</button></div><small id="logoInfoH" class="muted">Sem logo</small><div class="inspector-grid slim"><label>X (%)<input id="logoXH" type="number" min="0" max="95" value="79"/></label><label>Y (%)<input id="logoYH" type="number" min="0" max="95" value="5"/></label><label>Largura (%)<input id="logoWH" type="number" min="4" max="90" value="16"/></label><label>Altura (%)<input id="logoHH" type="number" min="3" max="60" value="11"/></label><label>Opac. (%)<input id="logoOpacityH" type="number" min="0" max="100" value="100"/></label></div></div></div><div class="brand-card"><h4>9:16 • Vertical</h4><label class="sm-label">GC vertical</label><input id="gcTitleV" placeholder="Título vertical" value="BROADCAST STUDIO"/><input id="gcSubV" placeholder="Subtítulo" value="AO VIVO EM VERTICAL"/><label class="check"><input id="gcOnV" type="checkbox" checked/> Exibir GC</label><div class="brand-group"><label class="sm-label">Plano de fundo</label><div class="form-row compact"><input id="bgColorV" type="color" value="#111b30"/><input id="bgImageV" type="file" accept="image/*"/><button id="btnClearBgV" class="btn tiny subtle" type="button">Limpar</button></div><small id="bgInfoV" class="muted">Sem imagem</small></div><div class="brand-group"><label class="sm-label">Moldura</label><label class="check"><input id="frameOnV" type="checkbox"/> Exibir moldura</label><div class="form-row compact"><label>Largura <input id="frameWidthV" type="number" min="0" max="80" value="18"/></label><label>Opac. <input id="frameOpacityV" type="number" min="0" max="100" value="100"/></label><input id="frameColorV" type="color" value="#ffffff"/></div><div class="form-row compact"><input id="frameImageV" type="file" accept="image/*"/><button id="btnClearFrameV" class="btn tiny subtle" type="button">Limpar imagem</button></div><small id="frameInfoV" class="muted">Sem imagem</small></div><div class="brand-group"><label class="sm-label">Logo</label><label class="check"><input id="logoOnV" type="checkbox"/> Exibir logo</label><div class="form-row compact"><input id="logoImageV" type="file" accept="image/*"/><button id="btnClearLogoV" class="btn tiny subtle" type="button">Limpar logo</button></div><small id="logoInfoV" class="muted">Sem logo</small><div class="inspector-grid slim"><label>X (%)<input id="logoXV" type="number" min="0" max="95" value="68"/></label><label>Y (%)<input id="logoYV" type="number" min="0" max="95" value="3"/></label><label>Largura (%)<input id="logoWV" type="number" min="4" max="90" value="23"/></label><label>Altura (%)<input id="logoHV" type="number" min="3" max="60" value="9"/></label><label>Opac. (%)<input id="logoOpacityV" type="number" min="0" max="100" value="100"/></label></div></div></div></div></section>
+      <section class="panel operator-panel"><div class="section-title"><h3>Registros e ocorrências</h3><button id="clearLog" class="btn tiny subtle">Limpar</button></div><div id="logs" class="logs" aria-live="polite"></div></section>
+    </main>
+
+    <aside class="sidebar right">
+      <div class="side-heading">CONTROLES DE PRODUÇÃO</div>
+      <section class="panel"><div class="section-title"><h3>Composições por canvas</h3><span class="counter">Máximo: 4</span></div>
+        <small class="muted">Três janelas de vídeo (câmeras locais ou convidados aprovados) e uma janela dedicada à playlist. Selecione o convidado no inspetor.</small>
+        <label class="sm-label">16:9 • Horizontal</label><div id="channelsH" class="channel-list"></div>
+        <label class="sm-label">9:16 • Vertical</label><div id="channelsV" class="channel-list"></div>
+      </section>
+      <section class="panel"><div class="section-title"><h3>Inspetor de janela</h3><span id="selectedLabel" class="counter">Nenhuma</span></div><div id="noSelection" class="muted empty-hint">Clique em uma janela da prévia para editar posição, tamanho e fonte.</div><div id="inspector" hidden>
+        <label class="sm-label">Nome</label><input id="slotName" type="text"/>
+        <label class="sm-label">Fonte da janela</label><select id="slotSource"></select>
+        <div class="inspector-grid"><label>X (%)<input type="number" id="slotX" min="0" max="100" step="1"/></label><label>Y (%)<input type="number" id="slotY" min="0" max="100" step="1"/></label><label>Largura (%)<input type="number" id="slotW" min="5" max="100" step="1"/></label><label>Altura (%)<input type="number" id="slotH" min="5" max="100" step="1"/></label></div>
+        <label class="sm-label">Ajuste da imagem</label><select id="slotFit"><option value="contain">Conter — sem cortar</option><option value="cover">Preencher — com recorte</option><option value="stretch">Esticar (com distorção)</option></select>
+        <div class="inspector-grid"><label>Borda (px)<input id="slotBorder" type="number" min="0" max="20" step="1"/></label><label>Cor da borda<input id="slotColor" type="color"/></label></div>
+        <div class="form-row"><button id="slotDown" class="btn subtle wide">↓ Camada</button><button id="slotUp" class="btn subtle wide">↑ Camada</button><button id="slotDelete" class="btn danger">Ocultar janela</button></div>
+      </div></section>
+      <section class="panel"><div class="section-title"><h3>Transmissão RTMP</h3><span id="rtmpCount" class="counter">0 ativas</span></div><small class="muted">Uma composição por destino. Exige aplicativo desktop e FFmpeg instalado.</small><div class="radio-mode"><span class="dot green"></span><span id="ffmpegInfo">Verificando disponibilidade...</span></div>
+        <label class="sm-label">Nome do destino</label><input id="destName" type="text" placeholder="YouTube / Twitch / RTMP"/>
+        <label class="sm-label">URL RTMP/RTMPS completa (incluindo chave)</label><input id="destUrl" type="password" placeholder="rtmps://servidor/app/chave" autocomplete="off"/>
+        <div class="form-row"><select id="destFormat"><option value="h">Canvas horizontal 16:9</option><option value="v">Canvas vertical 9:16</option></select><button id="btnDestAdd" class="btn primary">+ Adicionar</button></div>
+        <div id="destList" class="destination-list"></div>
+        <div class="form-row"><button id="btnStartOutputs" class="btn green wide">▶ Iniciar destinos</button><button id="btnStopOutputs" class="btn subtle">■ Parar</button></div>
+        <small class="muted">As chaves não são salvas nem exibidas nos logs. “Enviando” não confirma que a plataforma aceitou a live.</small>
+      </section>
+      <section class="panel"><div class="section-title"><h3>Gravação</h3><span id="recordingState" class="counter">Inativa</span></div><p class="muted">Grava a composição completa do PROGRAMA com áudio. Dois arquivos WebM independentes.</p><div class="form-row"><button id="btnRecH" class="btn subtle wide">● Gravar 16:9</button><button id="btnRecV" class="btn subtle wide">● Gravar 9:16</button></div><p class="muted">Os downloads são gerados ao parar. Mantenha a janela aberta até finalizar.</p></section>
+      <section class="panel"><h3>Informações da V1.8.0</h3><div class="info-list"><div><b>Incluído</b><span>Dual Canvas, branding por canvas, 3 canais de câmeras/convidados, playlist, layouts rápidos, sala de espera, gravação e RTMP</span></div><div><b>Próximas versões</b><span>Chat autenticado, fontes NDI/SRT, capturas autorizadas e presets avançados de cena e identidade</span></div></div></section>
+    </aside>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+  <script src="cloud-studio.js"></script>
+</body>
+</html>

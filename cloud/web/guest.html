@@ -1,0 +1,12 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Convidado — Broadcast Studio</title><link rel="stylesheet" href="/styles.css"/></head>
+<body class="guest-body"><main class="guest-card"><div class="guest-brand">◧ BROADCAST STUDIO <span>LIVEKIT CLOUD</span></div>
+<h1>Participar da transmissão</h1><p class="muted">Entre pelo celular ou computador. O apresentador aprovará sua entrada.</p>
+<label class="sm-label" for="guestName">Seu nome</label><input id="guestName" maxlength="48" placeholder="Como deseja aparecer?" autocomplete="name"/>
+<div class="guest-preview"><video id="guestPreview" autoplay muted playsinline></video><span id="guestPlaceholder">Prévia da câmera</span></div>
+<div class="guest-device-config"><label class="sm-label" for="guestCameraSelect">Câmera</label><select id="guestCameraSelect"><option value="">Padrão</option></select><label class="sm-label" for="guestMicSelect">Microfone</label><select id="guestMicSelect"><option value="">Padrão</option></select><button id="guestRefreshDevices" class="btn subtle" type="button">↻ Atualizar dispositivos</button></div>
+<div class="guest-toggles"><label class="check"><input id="guestCamera" type="checkbox" checked/> Câmera ligada</label><label class="check"><input id="guestMic" type="checkbox" checked/> Microfone ligado</label></div>
+<div id="remoteAudioTracks" hidden></div><button class="btn subtle wide" id="btnAudio" hidden>▶ Ativar som da sala</button>
+<button class="btn primary wide" id="guestJoin">Solicitar entrada</button><button class="btn danger wide" id="guestLeave" hidden>Sair da sala</button>
+<p id="guestStatus" class="guest-status" role="status">Câmera e microfone só serão enviados após a aprovação.</p>
+<small class="muted">A conexão é criptografada por HTTPS e WebRTC. O endereço do convite não dá acesso à administração do estúdio.</small>
+</main><script src="/vendor/livekit-client.umd.min.js"></script><script src="/guest.js"></script></body></html>
