@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: broadcast-studio-salas
+    runtime: node
+    rootDir: cloud
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: STUDIO_OPERATOR_KEY
+        sync: false
+      - key: PUBLIC_ORIGIN
+        sync: false
+      - key: ALLOWED_STUDIO_ORIGINS
+        value: http://127.0.0.1:8791,http://localhost:8791
