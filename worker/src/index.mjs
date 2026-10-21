@@ -25,7 +25,21 @@ async function parseBody(request){
   try{return JSON.parse(body||'{}');}catch{throw new HttpError(400,'JSON inválido');}
 }
 class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
-function configured(env){return !!(validWs(env.LIVEKIT_URL)&&String(env.LIVEKIT_API_KEY||'').length>=4&&String(env.LIVEKIT_API_SECRET||'').length>=12&&String(env.STUDIO_OPERATOR_KEY||'').length>=24&&env.LIVEKIT_API_KEY!==env.LIVEKIT_API_SECRET&&env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_SECRET&&env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_KEY);}
+// Diagnóstico por nome e validade, sem expor qualquer credencial ou parte dela.
+function configurationChecks(env){
+  const checks={
+    LIVEKIT_URL:validWs(env.LIVEKIT_URL),
+    LIVEKIT_API_KEY:String(env.LIVEKIT_API_KEY||'').length>=4,
+    LIVEKIT_API_SECRET:String(env.LIVEKIT_API_SECRET||'').length>=12,
+    STUDIO_OPERATOR_KEY:String(env.STUDIO_OPERATOR_KEY||'').length>=24
+  };
+  const distinct=env.LIVEKIT_API_KEY!==env.LIVEKIT_API_SECRET &&
+    env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_SECRET &&
+    env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_KEY;
+  return {checks,distinct,configured:Object.values(checks).every(Boolean)&&distinct};
+}
+function configured(env){return configurationChecks(env).configured;}
+
 async function token(env,room,identity,name){
   const now=Math.floor(Date.now()/1000);
   const head={alg:'HS256',typ:'JWT'};
@@ -105,8 +119,19 @@ async function call(stub,path,method='GET',body=null,headers={}){
   const res=await stub.fetch(request);const data=await res.json();if(!res.ok)throw new HttpError(res.status,data.error||'Falha na sala');return data;
 }
 async function api(request,env){
-  if(!configured(env))return error(503,'Configuração LiveKit pendente no Cloudflare');
   const url=new URL(request.url),path=url.pathname;
+  // Somente a chave do operador permite inspecionar a validação dos nomes.
+  // Não respondemos com comprimentos, valores, prefixes, domínios ou segredos.
+  if(path==='/api/studio/diagnostics'&&request.method==='GET'){
+    if(String(env.STUDIO_OPERATOR_KEY||'').length<24)
+      return error(503,'STUDIO_OPERATOR_KEY ausente ou curta no Worker de produção');
+    if(!safeEqual(request.headers.get('x-studio-key'),env.STUDIO_OPERATOR_KEY))
+      return error(401,'Chave do operador inválida');
+    const report=configurationChecks(env);
+    return json({ok:true,configured:report.configured,checks:report.checks,keysDistinct:report.distinct,
+      note:'Formato válido não comprova que a API Key e a API Secret pertencem ao mesmo projeto.'});
+  }
+  if(!configured(env))return error(503,'Configuração LiveKit pendente no Cloudflare');
   if(path==='/api/health'&&request.method==='GET')return json({ok:true,service:'broadcast-cloudflare-livekit',configured:true,storage:'durable-objects-sqlite'});
   if(path.startsWith('/api/studio/')){
     if(!safeEqual(request.headers.get('x-studio-key'),env.STUDIO_OPERATOR_KEY))return error(401,'Chave do operador inválida');

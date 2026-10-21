@@ -9,7 +9,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brandicon">◧</span><div><strong>BROADCAST STUDIO</strong><small>DUAL CANVAS · v1.9.0</small></div></div>
+    <div class="brand"><span class="brandicon">◧</span><div><strong>BROADCAST STUDIO</strong><small>DUAL CANVAS · v1.9.2</small></div></div>
     <div class="top-actions"><span id="systemStatus" class="pill">● Preparado</span><button id="btnSave" class="btn subtle">↓ Salvar preset</button><button id="btnLoad" class="btn subtle">↑ Abrir preset</button><input type="file" accept=".json,application/json" hidden id="presetFile"/><button id="btnRecordBoth" class="btn danger">● Gravar 16:9 + 9:16</button><button id="btnStopBoth" class="btn subtle" disabled>■ Parar gravação</button></div>
   </header>
   <div class="app-shell">
@@ -31,7 +31,7 @@
         <p class="muted">Link HTTPS público direto: sem Cloudflared local. Configure uma vez o servidor de salas hospedado e a chave de operador.</p>
         <label class="sm-label">Servidor Cloudflare HTTPS</label><input id="cloudOrigin" type="url" placeholder="https://broadcast-studio.workers.dev" spellcheck="false" autocomplete="off"/>
         <label class="sm-label">Chave de operador (não é a API Secret do LiveKit)</label><input id="cloudOperatorKey" type="password" placeholder="Chave gerada no backend hospedado" autocomplete="off"/>
-        <div class="form-row"><button id="cloudCreate" class="btn primary wide" type="button">Criar sala LiveKit</button><button id="cloudReconnect" class="btn subtle" type="button" disabled>Reconectar</button></div>
+        <div class="form-row"><button id="cloudCreate" class="btn primary wide" type="button">Criar sala LiveKit</button><button id="cloudReconnect" class="btn subtle" type="button" disabled>Reconectar</button></div><button id="cloudDiagnose" class="btn subtle wide" type="button">Diagnosticar configurações do LiveKit</button>
         <label class="sm-label">Convite HTTPS</label><input id="cloudInvite" type="text" readonly disabled placeholder="Aguardando criação da sala"/>
         <div class="form-row"><button id="cloudCopy" class="btn green wide" disabled>Copiar convite</button><button id="cloudTest" class="btn subtle" type="button">Abrir link</button></div>
         <button id="cloudMic" class="btn subtle wide" type="button">Compartilhar microfone do estúdio</button>

@@ -37,6 +37,17 @@
    for(const participant of room.remoteParticipants.values())for(const pub of participant.trackPublications.values())if(pub.isSubscribed&&pub.track)addTrack(pub.track,participant);
    status('Sala LiveKit conectada. Aguarde a entrada dos convidados.','good');renderPeople();
  }
+ async function diagnose(){try{
+   base=trimBase($('cloudOrigin').value);
+   operator=$('cloudOperatorKey').value.trim();
+   if(operator.length<24)throw Error('A chave do operador precisa de pelo menos 24 caracteres.');
+   status('Verificando somente a configuração do servidor, sem consultar valores de segredos...');
+   const result=await api('/api/studio/diagnostics');
+   if(result.configured){status('Configuração estrutural válida. Se a sala ainda falhar, verifique as credenciais reais do LiveKit.','good');return;}
+   const invalid=Object.entries(result.checks||{}).filter(([,ok])=>!ok).map(([name])=>name);
+   if(!result.keysDistinct)invalid.push('Credenciais duplicadas');
+   status('Ajuste no Cloudflare (Settings → Variables and Secrets): '+invalid.join(', ')+'. Após corrigir, clique em Deploy.','error');
+ }catch(e){status('Diagnóstico: '+e.message,'error');}}
  async function create(){try{
    base=trimBase($('cloudOrigin').value);operator=$('cloudOperatorKey').value.trim();if(operator.length<24)throw Error('A chave do operador deve ter pelo menos 24 caracteres.');
    $('cloudCreate').disabled=true;status('Criando sala segura no servidor hospedado...');
@@ -68,7 +79,7 @@
    const LK=await sdk();await room.localParticipant.publishTrack(track,{source:LK.Track.Source.Microphone});status('Microfone do estúdio compartilhado com os convidados.','good');
  }catch(e){status('Não foi possível compartilhar microfone: '+e.message,'error');}}
  function init(){if(!bridge)return; if(location.protocol==='https:' && !$('cloudOrigin').value){$('cloudOrigin').value=location.origin;}try{const previous=sessionStorage.getItem('broadcast_livekit_room_id');if(previous){roomId=previous;$('cloudReconnect').disabled=false;status('Sala anterior encontrada. Informe sua chave de operador e clique em Reconectar.');}}catch(_){} 
-  $('cloudCreate').onclick=create;$('cloudReconnect').onclick=reconnect;$('cloudMic').onclick=shareMic;
+  $('cloudCreate').onclick=create;$('cloudReconnect').onclick=reconnect;$('cloudMic').onclick=shareMic;$('cloudDiagnose').onclick=diagnose;
   $('cloudCopy').onclick=async()=>{if(!url)return;try{await navigator.clipboard.writeText(url);status('Convite HTTPS copiado.','good');}catch(_){$('cloudInvite').select();status('Selecione e copie o convite.','warn');}};
   $('cloudTest').onclick=()=>{if(!url)return status('Crie primeiro a sala.','warn');window.open(url,'_blank','noopener,noreferrer');};
   renderPeople();

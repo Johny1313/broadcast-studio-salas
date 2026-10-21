@@ -41,3 +41,29 @@ test('sem secrets não expõe serviço LiveKit',async()=>{const s=setup();s.env.
 test('chave de host renovável só pelo operador',async()=>{const s=setup(),c=await create(s);const path=`/api/studio/rooms/${c.roomId}/host-token`;assert.equal((await s.call(path,{method:'POST',body:{}})).status,401);const r=await s.call(path,{method:'POST',headers:s.auth,body:{}});assert.equal(r.status,200);assert.equal(decode(r.data.token).video.room,'broadcast_'+c.roomId);});
 
 test('operador restaura convite sem expor segredo a convidados',async()=>{const s=setup(),c=await create(s);const url=`/api/studio/rooms/${c.roomId}/invite`;const bad=await s.call(url);assert.equal(bad.status,401);const ok=await s.call(url,{headers:s.auth});assert.equal(ok.status,200);assert.equal(ok.data.inviteUrl,c.inviteUrl);});
+
+
+test('diagnóstico protegido distingue segredo ausente de URL inválida, sem vazar valores',async()=>{
+  const s=setup();s.env.LIVEKIT_URL='https://endereco-invalido.example';s.env.LIVEKIT_API_SECRET='';
+  const unauthorized=await s.call('/api/studio/diagnostics');assert.equal(unauthorized.status,401);
+  const result=await s.call('/api/studio/diagnostics',{headers:s.auth});
+  assert.equal(result.status,200);assert.equal(result.data.configured,false);
+  assert.equal(result.data.checks.LIVEKIT_URL,false);
+  assert.equal(result.data.checks.LIVEKIT_API_SECRET,false);
+  assert.equal(result.data.checks.LIVEKIT_API_KEY,true);
+  assert.equal(result.data.checks.STUDIO_OPERATOR_KEY,true);
+  assert.ok(!JSON.stringify(result.data).includes('local_operator_key_for_tests'));
+});
+
+test('diagnóstico indica chave de operador ausente sem divulgar segredos',async()=>{
+  const s=setup();s.env.STUDIO_OPERATOR_KEY='';
+  const result=await s.call('/api/studio/diagnostics');
+  assert.equal(result.status,503);
+  assert.ok(!JSON.stringify(result.data).includes('superSecret'));
+});
+
+test('diagnóstico identifica credenciais duplicadas',async()=>{
+  const s=setup();s.env.LIVEKIT_API_SECRET=s.env.LIVEKIT_API_KEY;
+  const result=await s.call('/api/studio/diagnostics',{headers:s.auth});
+  assert.equal(result.status,200);assert.equal(result.data.keysDistinct,false);
+});
