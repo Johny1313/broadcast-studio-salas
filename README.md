@@ -1,3 +1,5 @@
+> **Atualização V1.9.3:** para a interface WEB, autenticação do operador via Cloudflare Access, sem campo de chave. Leia primeiro `COMECE_AQUI.md`. Não embuta chaves no HTML/JS.
+
 # Broadcast Studio Dual Canvas — V1.9.0 Cloudflare Native
 
 ## O que esta versão entrega

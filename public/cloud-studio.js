@@ -1,13 +1,15 @@
-/* Broadcast Studio V1.9 — LiveKit Cloud host bridge. Credentials stay in the hosted backend. */
+/* Broadcast Studio V1.9.3 — autenticacao Cloudflare Access, sem chave no navegador. */
 'use strict';
 (()=>{
  const $=id=>document.getElementById(id),bridge=window.BroadcastStudioCloudBridge;
- let base='',operator='',roomId='',url='',livekitUrl='',room=null,pollTimer=null,scriptUrl='',loadingSDK=null;
+ let base='',roomId='',url='',livekitUrl='',room=null,pollTimer=null,scriptUrl='',loadingSDK=null;
  const names=new Map(),streams=new Map(),assigned=new Map();
  function status(message,type=''){const el=$('cloudStatus');el.textContent=message;el.dataset.status=type;}
  const trimBase=value=>{const u=new URL(String(value).trim());if(u.protocol!=='https:'||u.username||u.password||u.port||u.pathname!=='/'||u.search||u.hash)throw Error('Informe somente o domínio HTTPS (ex.: https://salas.exemplo.com).');return u.origin;};
- async function api(path,body=null){if(!base||!operator)throw Error('Configure o servidor HTTPS e a chave do operador.');
-  const response=await fetch(base+path,{method:body===null?'GET':'POST',headers:{'Content-Type':'application/json','x-studio-key':operator},...(body!==null?{body:JSON.stringify(body)}:{})});
+ async function api(path,body=null){if(!base)throw Error('Configure o servidor HTTPS.');
+  const response=await fetch(base+path,{method:body===null?'GET':'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},...(body!==null?{body:JSON.stringify(body)}:{})});
+  const contentType=response.headers.get('content-type')||'';
+  if(!contentType.includes('application/json'))throw Error('Faça login como operador usando o botão Entrar como operador.');
   const data=await response.json();if(!response.ok)throw Error(data.error||'Falha no servidor');return data;
  }
  async function sdk(){if(window.LivekitClient)return window.LivekitClient;if(loadingSDK)return loadingSDK;
@@ -39,8 +41,7 @@
  }
  async function diagnose(){try{
    base=trimBase($('cloudOrigin').value);
-   operator=$('cloudOperatorKey').value.trim();
-   if(operator.length<24)throw Error('A chave do operador precisa de pelo menos 24 caracteres.');
+   if(base!==location.origin)throw Error('Use a mesma origem HTTPS do estúdio para entrar com Cloudflare Access.');
    status('Verificando somente a configuração do servidor, sem consultar valores de segredos...');
    const result=await api('/api/studio/diagnostics');
    if(result.configured){status('Configuração estrutural válida. Se a sala ainda falhar, verifique as credenciais reais do LiveKit.','good');return;}
@@ -49,7 +50,7 @@
    status('Ajuste no Cloudflare (Settings → Variables and Secrets): '+invalid.join(', ')+'. Após corrigir, clique em Deploy.','error');
  }catch(e){status('Diagnóstico: '+e.message,'error');}}
  async function create(){try{
-   base=trimBase($('cloudOrigin').value);operator=$('cloudOperatorKey').value.trim();if(operator.length<24)throw Error('A chave do operador deve ter pelo menos 24 caracteres.');
+   base=trimBase($('cloudOrigin').value);if(base!==location.origin)throw Error('Na versão web, use a mesma origem HTTPS do estúdio para o Cloudflare Access.');
    $('cloudCreate').disabled=true;status('Criando sala segura no servidor hospedado...');
    const data=await api('/api/studio/rooms',{});roomId=data.roomId;url=data.inviteUrl;livekitUrl=data.livekitUrl;try{sessionStorage.setItem('broadcast_livekit_room_id',roomId);}catch(_){}
    $('cloudReconnect').disabled=false;
@@ -57,7 +58,7 @@
    $('cloudInvite').value=url;$('cloudInvite').disabled=false;$('cloudCopy').disabled=false;
    await poll();status('Sala pronta. Compartilhe o convite HTTPS.','good');
  }catch(e){status('Não foi possível criar a sala: '+e.message,'error');}finally{$('cloudCreate').disabled=false;}}
- async function reconnect(){if(!roomId)return;try{base=trimBase($('cloudOrigin').value);operator=$('cloudOperatorKey').value.trim();const invite=await api(`/api/studio/rooms/${roomId}/invite`);url=invite.inviteUrl;const data=await api(`/api/studio/rooms/${roomId}/host-token`,{});livekitUrl=data.livekitUrl;await connect(data.token);await poll();$('cloudInvite').value=url;$('cloudInvite').disabled=false;$('cloudCopy').disabled=false;status('Reconectado ao LiveKit.','good');}catch(e){status('Falha na reconexão: '+e.message,'error');}}
+ async function reconnect(){if(!roomId)return;try{base=trimBase($('cloudOrigin').value);if(base!==location.origin)throw Error('Use o domínio HTTPS do próprio estúdio.');const invite=await api(`/api/studio/rooms/${roomId}/invite`);url=invite.inviteUrl;const data=await api(`/api/studio/rooms/${roomId}/host-token`,{});livekitUrl=data.livekitUrl;await connect(data.token);await poll();$('cloudInvite').value=url;$('cloudInvite').disabled=false;$('cloudCopy').disabled=false;status('Reconectado ao LiveKit.','good');}catch(e){status('Falha na reconexão: '+e.message,'error');}}
  async function approve(id,approve){try{await api(`/api/studio/rooms/${roomId}/approve`,{guestId:id,approve});await poll();}catch(e){status('Erro de aprovação: '+e.message,'error');}}
  function renderPeople(guests=[]){const list=$('cloudPeople');if(!list)return;list.replaceChildren();
    const known=guests.length?guests:[...names].map(([id,name])=>({id,name,status:'approved'}));
@@ -78,8 +79,13 @@
  async function shareMic(){if(!room)return status('Crie a sala primeiro.','warn');try{const audio=bridge.getMicStream();const track=audio?.getAudioTracks()?.[0];if(!track)throw Error('Conecte primeiro o microfone no painel de áudio do estúdio.');
    const LK=await sdk();await room.localParticipant.publishTrack(track,{source:LK.Track.Source.Microphone});status('Microfone do estúdio compartilhado com os convidados.','good');
  }catch(e){status('Não foi possível compartilhar microfone: '+e.message,'error');}}
- function init(){if(!bridge)return; if(location.protocol==='https:' && !$('cloudOrigin').value){$('cloudOrigin').value=location.origin;}try{const previous=sessionStorage.getItem('broadcast_livekit_room_id');if(previous){roomId=previous;$('cloudReconnect').disabled=false;status('Sala anterior encontrada. Informe sua chave de operador e clique em Reconectar.');}}catch(_){} 
-  $('cloudCreate').onclick=create;$('cloudReconnect').onclick=reconnect;$('cloudMic').onclick=shareMic;$('cloudDiagnose').onclick=diagnose;
+ function init(){if(!bridge)return; if(location.protocol==='https:' && !$('cloudOrigin').value){$('cloudOrigin').value=location.origin;}try{const previous=sessionStorage.getItem('broadcast_livekit_room_id');if(previous){roomId=previous;$('cloudReconnect').disabled=false;status('Sala anterior encontrada. Faça login como operador e clique em Reconectar.');}}catch(_){} 
+  $('cloudLogin').onclick=()=>{
+     try{const origin=trimBase($('cloudOrigin').value);if(origin!==location.origin)throw Error('Abra o estúdio no mesmo domínio Cloudflare dos convites.');
+       window.open(origin+'/api/studio/session','_blank','noopener,noreferrer');
+       status('Conclua o login na nova aba e depois clique em Diagnosticar. Se não abrir, permita pop-ups.','good');
+     }catch(e){status(e.message,'error');}
+   };$('cloudCreate').onclick=create;$('cloudReconnect').onclick=reconnect;$('cloudMic').onclick=shareMic;$('cloudDiagnose').onclick=diagnose;
   $('cloudCopy').onclick=async()=>{if(!url)return;try{await navigator.clipboard.writeText(url);status('Convite HTTPS copiado.','good');}catch(_){$('cloudInvite').select();status('Selecione e copie o convite.','warn');}};
   $('cloudTest').onclick=()=>{if(!url)return status('Crie primeiro a sala.','warn');window.open(url,'_blank','noopener,noreferrer');};
   renderPeople();

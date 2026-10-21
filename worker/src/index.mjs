@@ -1,4 +1,4 @@
-/** Broadcast Studio V1.9 — Cloudflare Worker + SQLite-backed Durable Object.
+/** Broadcast Studio V1.9.3 — Cloudflare Worker + SQLite-backed Durable Object.
  * No cloudflared, Render, or LiveKit API secret in browser code.
  */
 const ROOM_TTL = 12 * 60 * 60 * 1000;
@@ -25,17 +25,78 @@ async function parseBody(request){
   try{return JSON.parse(body||'{}');}catch{throw new HttpError(400,'JSON inválido');}
 }
 class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
+// Cloudflare Access (operador sem segredo no navegador).
+// O Worker valida a assinatura RS256, emissor, audiência e prazo do JWT.
+function accessConfig(env){
+  const raw=String(env.CLOUDFLARE_ACCESS_TEAM_DOMAIN||'').trim().replace(/\/$/,'');
+  const aud=String(env.CLOUDFLARE_ACCESS_AUD||'').trim();
+  try{const u=new URL(raw);
+    if(u.protocol==='https:' && /^[-a-z0-9]+\.cloudflareaccess\.com$/i.test(u.hostname) && u.pathname==='/' && !u.search && !u.hash && aud.length>=12)
+      return {issuer:u.origin,aud};
+  }catch(_){ /* configuração ainda não aplicada */ }
+  return null;
+}
+function accessEnabled(env){return !!accessConfig(env);}
+function decodeB64Url(str){
+  if(typeof str!=='string'|| !/^[A-Za-z0-9_-]+$/.test(str))throw Error('JWT inválido');
+  const raw=atob(str.replaceAll('-','+').replaceAll('_','/')+'='.repeat((4-str.length%4)%4));
+  return Uint8Array.from(raw, c=>c.charCodeAt(0));
+}
+const accessKeyCache=new Map();
+async function verifyAccess(request,env){
+  const config=accessConfig(env);
+  if(!config)throw new HttpError(503,'Configure a autenticação Cloudflare Access para o operador');
+  const jwt=request.headers.get('cf-access-jwt-assertion');
+  if(!jwt || jwt.length>16000)throw new HttpError(401,'Faça login como operador no Cloudflare Access');
+  try{
+    const parts=jwt.split('.');if(parts.length!==3)throw Error('JWT');
+    const h=JSON.parse(new TextDecoder().decode(decodeB64Url(parts[0])));
+    const p=JSON.parse(new TextDecoder().decode(decodeB64Url(parts[1])));
+    if(h.alg!=='RS256'||typeof h.kid!=='string'||h.kid.length>256)throw Error('Algoritmo');
+    const now=Math.floor(Date.now()/1000);
+    if(p.iss!==config.issuer || !(typeof p.aud==='string'?p.aud===config.aud:Array.isArray(p.aud)&&p.aud.includes(config.aud)) ||
+      typeof p.exp!=='number'||p.exp<=now|| typeof p.iat!=='number'||p.iat>now+60 ||
+      (p.nbf!==undefined&&(typeof p.nbf!=='number'||p.nbf>now+60)))throw Error('Claims');
+    const cacheKey=config.issuer;let cached=accessKeyCache.get(cacheKey);
+    if(!cached||cached.until<Date.now()){
+      const res=await fetch(config.issuer+'/cdn-cgi/access/certs',{redirect:'error',signal:AbortSignal.timeout(7000)});
+      if(!res.ok)throw Error('Certificados indisponíveis');
+      const certs=await res.json();
+      if(!Array.isArray(certs.keys)||certs.keys.length>20)throw Error('Certificados inválidos');
+      cached={keys:certs.keys,until:Date.now()+5*60*1000};accessKeyCache.set(cacheKey,cached);
+    }
+    const jwk=cached.keys.find(k=>k.kid===h.kid&&k.kty==='RSA'&&(!k.alg||k.alg==='RS256')&&(!k.use||k.use==='sig'));
+    if(!jwk)throw Error('Chave pública não encontrada');
+    const key=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+    const valid=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,decodeB64Url(parts[2]),new TextEncoder().encode(parts[0]+'.'+parts[1]));
+    if(!valid)throw Error('Assinatura inválida');
+    return {identity:String(p.email||p.sub||'operador').slice(0,128)};
+  }catch(e){
+    if(e instanceof HttpError)throw e;
+    throw new HttpError(401,'Sessão do Cloudflare Access inválida ou expirada. Faça login novamente');
+  }
+}
+async function requireOperator(request,env){
+  if(accessEnabled(env))return verifyAccess(request,env);
+  // Compatibilidade temporária com o desktop anterior: nunca publicar a chave no HTML.
+  if(String(env.STUDIO_OPERATOR_KEY||'').length<24)
+    throw new HttpError(503,'Configure Cloudflare Access para operar sem chave ou configure o Secret do modo legado');
+  if(!safeEqual(request.headers.get('x-studio-key'),env.STUDIO_OPERATOR_KEY))
+    throw new HttpError(401,'Chave de operador inválida');
+  return {identity:'legado'};
+}
+
 // Diagnóstico por nome e validade, sem expor qualquer credencial ou parte dela.
 function configurationChecks(env){
   const checks={
     LIVEKIT_URL:validWs(env.LIVEKIT_URL),
     LIVEKIT_API_KEY:String(env.LIVEKIT_API_KEY||'').length>=4,
-    LIVEKIT_API_SECRET:String(env.LIVEKIT_API_SECRET||'').length>=12,
-    STUDIO_OPERATOR_KEY:String(env.STUDIO_OPERATOR_KEY||'').length>=24
+    LIVEKIT_API_SECRET:String(env.LIVEKIT_API_SECRET||'').length>=12
   };
+  if(accessEnabled(env))checks.CLOUDFLARE_ACCESS=true;
+  else checks.STUDIO_OPERATOR_KEY=String(env.STUDIO_OPERATOR_KEY||'').length>=24;
   const distinct=env.LIVEKIT_API_KEY!==env.LIVEKIT_API_SECRET &&
-    env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_SECRET &&
-    env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_KEY;
+    (accessEnabled(env)|| (env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_SECRET && env.STUDIO_OPERATOR_KEY!==env.LIVEKIT_API_KEY));
   return {checks,distinct,configured:Object.values(checks).every(Boolean)&&distinct};
 }
 function configured(env){return configurationChecks(env).configured;}
@@ -120,21 +181,25 @@ async function call(stub,path,method='GET',body=null,headers={}){
 }
 async function api(request,env){
   const url=new URL(request.url),path=url.pathname;
-  // Somente a chave do operador permite inspecionar a validação dos nomes.
-  // Não respondemos com comprimentos, valores, prefixes, domínios ou segredos.
-  if(path==='/api/studio/diagnostics'&&request.method==='GET'){
-    if(String(env.STUDIO_OPERATOR_KEY||'').length<24)
-      return error(503,'STUDIO_OPERATOR_KEY ausente ou curta no Worker de produção');
-    if(!safeEqual(request.headers.get('x-studio-key'),env.STUDIO_OPERATOR_KEY))
-      return error(401,'Chave do operador inválida');
-    const report=configurationChecks(env);
-    return json({ok:true,configured:report.configured,checks:report.checks,keysDistinct:report.distinct,
-      note:'Formato válido não comprova que a API Key e a API Secret pertencem ao mesmo projeto.'});
+  // O acesso ao operador ocorre antes de qualquer diagnóstico ou emissão de token.
+  if(path==='/api/studio/session'&&request.method==='GET'){
+    await requireOperator(request,env);
+    return new Response('<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Operador autorizado</title><body style="font:16px system-ui;padding:32px;background:#101b2b;color:white"><h2>Acesso autorizado</h2><p>Volte à aba do Broadcast Studio para criar salas.</p></body></html>',
+      {status:200,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
   }
-  if(!configured(env))return error(503,'Configuração LiveKit pendente no Cloudflare');
-  if(path==='/api/health'&&request.method==='GET')return json({ok:true,service:'broadcast-cloudflare-livekit',configured:true,storage:'durable-objects-sqlite'});
+  if(path==='/api/studio/diagnostics'&&request.method==='GET'){
+    await requireOperator(request,env);
+    const report=configurationChecks(env);
+    return json({ok:true,configured:report.configured,checks:report.checks,keysDistinct:report.distinct,operatorMode:accessEnabled(env)?'cloudflare_access':'legacy_key',
+      note:'Formatos válidos não comprovam que a API Key e o segredo do LiveKit correspondem ao mesmo projeto.'});
+  }
+  if(path==='/api/health'&&request.method==='GET'){
+    if(!configured(env))return error(503,'Configuração LiveKit pendente no Cloudflare');
+    return json({ok:true,service:'broadcast-cloudflare-livekit',configured:true,storage:'durable-objects-sqlite'});
+  }
   if(path.startsWith('/api/studio/')){
-    if(!safeEqual(request.headers.get('x-studio-key'),env.STUDIO_OPERATOR_KEY))return error(401,'Chave do operador inválida');
+    await requireOperator(request,env);
+    if(!configured(env))return error(503,'Configuração LiveKit pendente no Cloudflare');
     if(path==='/api/studio/rooms'&&request.method==='POST'){
       await parseBody(request);
       const id=random(12),invite=random(24),name='broadcast_'+id;

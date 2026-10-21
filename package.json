@@ -1,6 +1,6 @@
 {
   "name": "broadcast-studio-cloudflare-native",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "private": true,
   "type": "module",
   "description": "Broadcast Studio Dual Canvas com salas Cloudflare Workers + Durable Objects + LiveKit Cloud",
