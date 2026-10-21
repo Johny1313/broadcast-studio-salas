@@ -1,53 +1,95 @@
-# Broadcast Studio Dual Canvas V1.8 — Salas LiveKit Cloud
+# Broadcast Studio Dual Canvas — V1.9.0 Cloudflare Native
 
-## O que foi adicionado
+## O que esta versão entrega
 
-Esta evolução mantém as três janelas de câmera, a quarta janela de playlist, os dois canvas 16:9 / 9:16, layouts independentes, GCs, logo, moldura, fundo, gravação e RTMP. Adiciona um novo **módulo de reuniões remotas hospedadas**, que não usa `cloudflared` nem abre portas locais para convidados.
+Uma estrutura **única para GitHub + Cloudflare Workers** com:
 
-- Criar salas com convites HTTPS públicos a partir de um backend hospedado.
-- Entrada pelo celular ou computador, sem instalar aplicativo no aparelho do convidado.
-- Sala de espera: o convidado não recebe token de mídia antes de ser aprovado.
-- Aprovação e recusa de convidados (até oito solicitações por sala nesta primeira versão).
-- Distribuir até três convidados conectados nas janelas de câmera, com PREVIEW → PROGRAM.
-- Áudio dos convidados recebido pelo compositor e opção de compartilhar o microfone conectado do estúdio com a sala.
-- SDK LiveKit carregado do **seu próprio servidor de salas**, instalado via NPM nesse servidor.
+- Estúdio web por HTTPS com os dois canvas independentes (16:9 e 9:16).
+- Até três composições de câmeras (locais ou convidados LiveKit) e a quarta para playlist.
+- Moldura, fundo, logo e GC por formato, em PREVIEW e PROGRAM.
+- Entrada de convidados com HTTPS em `/guest.html`, pelo celular ou navegador, sem instalar Cloudflared.
+- Sala de espera, aprovação, recusa e máximo de oito convites/entradas por sala (três em composição).
+- Backend com armazenamento persistente em Durable Objects (SQLite) e tokens temporários LiveKit assinados no Worker.
+- Pasta `desktop/` com Electron e recursos de gravação e RTMP que permanecem **locais**.
 
-## Etapas obrigatórias de configuração inicial
+## Estrutura do repositório
 
-### A. Criar projeto LiveKit Cloud
-1. Crie um projeto em https://cloud.livekit.io/.
-2. Copie a URL WebSocket `wss://...livekit.cloud`, API Key e API Secret.
-3. **Nunca cole a API Secret no estúdio local ou em links de convite.** Ela é exclusiva do ambiente do servidor.
+```
+BroadcastStudio-DualCanvas-V1.9.0-CLOUDFLARE/
+├── public/                  # Studio + página de convite que Cloudflare publica
+├── worker/src/index.mjs     # API e sala persistente Durable Object
+├── scripts/build.mjs        # Copia SDK LiveKit do NPM para public/vendor/
+├── desktop/                 # Aplicativo Windows/Mac, mantido separado do Worker
+├── tests/                   # Testes de API, segurança, aprovação e tokens
+├── wrangler.jsonc           # Deploy Workers + assets + Durable Objects SQLite
+├── package.json             # npm install; npm run build; npm test
+└── .github/workflows/       # Testes em commits
+```
 
-### B. Publicar o serviço de salas (`cloud/`) em hospedagem HTTPS
-1. Publique o projeto em um serviço Node.js que forneça HTTPS público (por exemplo, Render usando `render.yaml`).
-2. Configure as variáveis de ambiente listadas em `cloud/.env.example` diretamente no painel privado da hospedagem. O arquivo `.env.example` é apenas documentação: não deve ser usado para colocar segredos num repositório público.
-3. Use `PUBLIC_ORIGIN=https://SEU-SERVIDOR.onrender.com` (ou domínio próprio), sem barra final.
-4. Crie `STUDIO_OPERATOR_KEY` com **32+ caracteres aleatórios diferentes** da API Key e API Secret do LiveKit.
-5. Na hospedagem, a instalação dos pacotes é realizada com `npm install` na pasta `cloud`; o serviço roda com `npm start`. A rota `/api/health` responde `broadcast-livekit-cloud` quando configurada.
-6. O processo Node deve operar atrás do HTTPS gerenciado pelo provedor. Configure **uma única instância**, pois as salas de espera são armazenadas em memória nesta V1.8.
+## Publicar com GitHub + Cloudflare (sem Render)
 
-### C. Conectar o aplicativo do produtor
-1. Abra o estúdio local no Windows ou Mac como nas versões anteriores.
-2. Em **Sala de convidados • LiveKit Cloud**, informe o `https://` do servidor e a `STUDIO_OPERATOR_KEY` (não é a API Secret).
-3. Clique **Criar sala LiveKit**. O convite só aparecerá quando o serviço online responder.
-4. Copie o link, envie ao convidado, aprove a entrada e selecione **Câmera 1/2/3**.
-5. Clique **No ar** no canvas desejado. O quarto slot continua destinado à playlist.
-6. Opcionalmente clique **Compartilhar microfone do estúdio**, após conectar o microfone local.
+1. Extraia o ZIP e envie **o conteúdo da pasta principal** para a raiz de um repositório **privado** no GitHub. O arquivo `wrangler.jsonc` precisa ficar na raiz. **Não envie arquivos `.env`, `.dev.vars`, chaves ou pastas `node_modules`.**
+2. Em https://dash.cloudflare.com/ entre em **Workers & Pages → Create application → GitHub**. Escolha o repositório e o ramo `main`.
+3. O nome do Worker deve ser **`broadcast-studio-salas`** para corresponder ao campo `name` do `wrangler.jsonc` (ou altere ambos para a mesma identificação).
+4. Configure **Root directory:** `/` (raiz). **Build command:** `npm install --no-audit --no-fund && npm run build`. **Deploy command:** `npx wrangler deploy`.
+5. No Worker, em **Settings → Variables and Secrets**, crie os **segredos**:
 
-## Não precisa instalar Cloudflared
-O host de salas está na internet e já recebe HTTPS; a transmissão WebRTC vai para o LiveKit Cloud. O aplicativo de produção continua no computador, mas **não precisa de software de túnel**. O acesso à internet e o projeto/hospedagem configurados são necessários. Instalar `node_modules`/Electron local é um procedimento separado já presente nas versões anteriores.
+   | Variável | Valor |
+   | --- | --- |
+   | `LIVEKIT_URL` | `wss://...livekit.cloud` recebido do seu projeto LiveKit |
+   | `LIVEKIT_API_KEY` | API Key do LiveKit |
+   | `LIVEKIT_API_SECRET` | API Secret do LiveKit, **Secret** |
+   | `STUDIO_OPERATOR_KEY` | chave aleatória de 32+ caracteres, **Secret** |
+   | `ALLOWED_STUDIO_ORIGINS` | opcional, origens extras do estúdio separadas por vírgula |
 
-## Limitações reais
-- Não existe um servidor LiveKit Cloud criado nem hospedagem publicada por esta entrega. Sem configurar LiveKit e a hospedagem, o botão Criar sala informa que não foi possível conectar.
-- A sala em memória expira 12 horas após sua criação e reinicializações do backend invalidam os convites. Para produção de alta disponibilidade, usar armazenamento persistente/Redis e autenticação por usuário.
-- Até oito **solicitações por sala** neste piloto; entradas e saídas frequentes requerem gerenciamento de participantes persistente.
-- Convidados ou operadores em redes restritas ainda precisam de conectividade adequada até o LiveKit; servidor de mídia e políticas de firewall continuam aplicáveis.
-- Retorno automático do áudio da playlist/monitoramento mix-minus profissional, gravação de trilhas isoladas e moderação avançada ainda precisam de implementação e testes.
-- A gravação remota/RTMP depende da validação ponta a ponta com participantes reais; nenhuma chamada pública foi testada neste ambiente.
-- Não afirme que há proteção de antivírus garantida: pacote com fonte não é código assinado. Não contém binários cloudflared ou segredo LiveKit.
+   **Nunca** coloque `LIVEKIT_API_SECRET` e `STUDIO_OPERATOR_KEY` no `wrangler.jsonc`, em HTML ou no GitHub. Na interface do estúdio, utilize apenas `STUDIO_OPERATOR_KEY`.
 
-## Testes
-- `node --test tests/*.test.cjs` (regressões antigas).
-- `node --test cloud/tests/*.test.cjs` (emissão de tokens simulados, autorização e aprovação).
-- A execução real exige `npm install` na hospedagem com acesso ao registro NPM, além de projeto LiveKit.
+6. Execute/repita o deployment após salvar secrets e confirme `https://SEU-WORKER.workers.dev/api/health` respondendo `configured:true`.
+7. Abra a URL do Worker; no painel **Sala de convidados • LiveKit Cloud**, confira o endereço, informe sua `STUDIO_OPERATOR_KEY` e clique em **Criar sala LiveKit**. Copie o convite HTTPS e teste com outro celular usando rede móvel.
+8. Para produzir no computador com RTMP e FFmpeg, execute **desktop/** com `npm install` e `npm start`. Nesse estúdio, use a mesma URL Cloudflare e a mesma chave de operador.
+
+### Sem instalar nada na máquina?
+
+Sim, para operar **o estúdio web e os convites remotos**, depois de publicados na Cloudflare, não é preciso instalar Cloudflared, Render ou Node local. Para **RTMP/FFmpeg desktop e bloqueio de anúncios do Electron**, continuam necessárias as ferramentas locais que já faziam parte do aplicativo. O bloqueio de anúncios **não funciona** no Chrome/Edge comuns.
+
+### Sobre a chave de operador
+
+No computador com Node instalado, você pode gerar uma chave aleatória com:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Não envie o resultado em chat nem prints. A Cloudflare permite inserir Secrets pelo painel.
+
+## Testes locais
+
+```bash
+npm install
+npm run build
+npm test
+npx wrangler dev
+```
+
+Para testar chamadas reais em desenvolvimento, crie seu próprio `.dev.vars` (baseado em `.dev.vars.example`, ignorado pelo Git). A URL local do Wrangler deve ter um caminho seguro para câmera/microfone. O backend sem LiveKit configurado responde 503, deliberadamente.
+
+## Limitações e segurança
+
+- **O pacote não está publicado na sua conta**: falta vincular seu GitHub à Cloudflare e inserir as credenciais LiveKit.
+- **Não há LiveKit Cloud contratado/configurado por nós.** A hospedagem na Cloudflare não substitui o serviço de mídia LiveKit e suas cotas.
+- Salas permanecem persistidas no Durable Object por até 12 horas desde a criação; um alarme do Durable Object programa a remoção dos dados ao expirar. Os tokens LiveKit expiram após 15 minutos; a aplicação pode solicitar outro token autenticado em uma reconexão.
+- Se um convidado já recebeu token antes de uma mudança de estado, a remoção imediata do LiveKit exige uma etapa adicional de moderação que não está implementada nesta V1.9.
+- Para retirar um convidado conectado na versão atual, o operador precisa usar controles do serviço LiveKit ou encerrar a sala; revogação de tokens e saída forçada ainda são pendências.
+- LiveKit requer conexões permitidas pela rede do participante; Workers gerenciam apenas a API e os convites, **não** transportam diretamente todos os pacotes de áudio e vídeo.
+- No estúdio web, gravação WebM depende das capacidades do navegador; saídas RTMP dependem do aplicativo desktop/FFmpeg.
+- Imagens importadas como logo/fundo/moldura podem precisar ser recarregadas ao reiniciar o app; presets antigos salvam geometria, não necessariamente a imagem.
+- A compatibilidade de um arquivo de vídeo de site externo com a captura/gravação permanece limitada. Alguns players de terceiros não permitem incorporar ou retransmitir vídeo.
+- Sem ferramentas com acesso às credenciais LiveKit e à conta Cloudflare do usuário, **não foi possível testar publicação real, SDK remoto carregado, vídeo entre dois celulares ou Cloudflare deploy**. O script de build precisa ser executado na Cloudflare após `npm install`.
+
+## Testes executados
+
+- `npm test` na raiz: testes do Worker e tokens HMAC/WebCrypto com armazenamento simulado.
+- `npm test` na pasta desktop: testes de regressão herdados da versão 1.8.
+- Verificações sintáticas com `node --check` em scripts relevantes.
+
+Ver `RELATORIO_TESTES.md`.

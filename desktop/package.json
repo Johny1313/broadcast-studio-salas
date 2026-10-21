@@ -1,0 +1,55 @@
+{
+  "name": "broadcast-studio-dual-canvas",
+  "version": "1.9.0",
+  "description": "Broadcast Studio Dual Canvas V1.9 — desktop integrado ao backend Cloudflare LiveKit",
+  "main": "electron/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "pack:win": "electron-builder --win nsis --x64",
+    "pack:mac": "electron-builder --mac dmg --universal",
+    "pack:dir": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "studio.broadcast.dualcanvas",
+    "productName": "Broadcast Studio Dual Canvas",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "styles.css",
+      "app.js",
+      "guest.html",
+      "guest.js",
+      "server/**/*",
+      "electron/**/*",
+      "README.md",
+      "cloud-studio.js"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "hardenedRuntime": true,
+      "entitlementsInherit": "electron/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Usa a câmera para compor transmissões e gravar vídeos.",
+        "NSMicrophoneUsageDescription": "Usa o microfone para compor o áudio das transmissões."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

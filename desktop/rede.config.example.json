@@ -1,0 +1,18 @@
+{
+  "stun": [
+    "stun:stun.l.google.com:19302"
+  ],
+  "turn": [
+    {
+      "urls": "turn:turn.SEU-DOMINIO.com:3478?transport=udp",
+      "username": "SEU_USUARIO",
+      "credential": "SUA_SENHA"
+    },
+    {
+      "urls": "turns:turn.SEU-DOMINIO.com:443?transport=tcp",
+      "username": "SEU_USUARIO",
+      "credential": "SUA_SENHA"
+    }
+  ],
+  "iceTransportPolicy": "all"
+}
