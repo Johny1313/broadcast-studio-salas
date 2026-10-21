@@ -93,3 +93,8 @@ Para testar chamadas reais em desenvolvimento, crie seu próprio `.dev.vars` (ba
 - Verificações sintáticas com `node --check` em scripts relevantes.
 
 Ver `RELATORIO_TESTES.md`.
+
+
+## Correção de publicação V1.9.1
+O script `scripts/build.mjs` agora aceita `livekit-client.umd.js` e `livekit-client.umd.min.js`, normalizando o arquivo público em `/vendor/livekit-client.umd.min.js`.
+A API Cloudflare continua com as mesmas rotas; não é necessário alterar credenciais nem as configurações do Worker.
